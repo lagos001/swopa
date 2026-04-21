@@ -23,9 +23,26 @@ const NAV_ITEMS = [
   { id: 'discover', label: 'Swopa', icon: 'discover' },
   { id: 'filters', label: 'Filtrar', icon: 'tops' },
   { id: 'wardrobe', label: 'Closet', icon: 'wardrobe' },
-  { id: 'cart', label: 'Carrito', icon: 'cart' },
+  { id: 'cart', label: 'Bag', icon: 'cart' },
   { id: 'profile', label: 'Perfil', icon: 'profile' },
 ];
+
+const NAV_ICON_FILES = {
+  discover: './icons/search.png',
+  filters: './icons/filter.png',
+  wardrobe: './icons/closet.png',
+  cart: './icons/bag.png',
+  profile: './icons/profile.png',
+};
+
+const CATEGORY_ICON_FILES = {
+  shoes: './icons/shoes.png',
+  bottoms: './icons/bottoms.png',
+  tops: './icons/tops.png',
+  accessories: './icons/accesories.png',
+  'underwear-pajamas': './icons/pj.png',
+  swimwear: './icons/swimwear.png',
+};
 
 const FLY_DISTANCE = 560;
 const SWIPE_FLING_MS = 220;
@@ -34,7 +51,7 @@ const TAP_MAX_MS = 500;
 const HORIZONTAL_COMMIT = 92;
 const VERTICAL_COMMIT = 96;
 const ROW_ACTION_THRESHOLD = 90;
-const ALPHA_SIZE_ORDER = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL'];
+const ALPHA_SIZE_ORDER = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL'];
 const SIZE_PREFERENCE_OPTIONS = {
   tops: [...ALPHA_SIZE_ORDER],
   bottoms: ['32', '34', '36', '38', '40', '42', '44', '46'],
@@ -82,8 +99,68 @@ function pluralize(count, singular, plural) {
   return count === 1 ? singular : plural;
 }
 
+function truncateByWords(text, maxLength = 32) {
+  const cleanText = (text || '').trim();
+  if (cleanText.length <= maxLength) return cleanText;
+  const words = cleanText.split(/\s+/);
+  const result = [];
+  let currentLength = 0;
+  words.forEach((word) => {
+    const nextLength = currentLength + word.length + (result.length ? 1 : 0);
+    if (nextLength <= maxLength) {
+      result.push(word);
+      currentLength = nextLength;
+    }
+  });
+  return result.length ? result.join(' ') : words[0];
+}
+
+function truncateRowProductName(name) {
+  return truncateByWords(name, 22);
+}
+
+function formatDisplayBrand(product) {
+  return titleCase((product?.brand || product?.source || '').toLowerCase());
+}
+
 function normalizeSizeLabel(size) {
-  return (size || '').toString().trim().toUpperCase();
+  const normalized = (size || '').toString().trim().toUpperCase();
+  if (normalized === 'XXL') return '2XL';
+  if (normalized === 'XXXL') return '3XL';
+  return normalized;
+}
+
+function getDisplaySizeLabel(size) {
+  const normalized = normalizeSizeLabel(size);
+  if (ALPHA_SIZE_ORDER.includes(normalized) || /^-?\d+(\.\d+)?$/.test(normalized)) return normalized;
+  if (normalized === 'ONE SIZE' || normalized === 'ÚNICA' || normalized === 'UNICA') return 'One size';
+  return (size || '').toString().trim();
+}
+
+function sortAvailableSizesForDisplay(sizes) {
+  const uniqueSizes = [...new Map((sizes || [])
+    .map((size) => [getDisplaySizeLabel(size), getDisplaySizeLabel(size)])
+    .filter(([label]) => Boolean(label))).values()];
+
+  return uniqueSizes.sort((a, b) => {
+    const normalizedA = normalizeSizeLabel(a);
+    const normalizedB = normalizeSizeLabel(b);
+    const alphaA = ALPHA_SIZE_ORDER.indexOf(normalizedA);
+    const alphaB = ALPHA_SIZE_ORDER.indexOf(normalizedB);
+    if (alphaA >= 0 || alphaB >= 0) {
+      if (alphaA < 0) return 1;
+      if (alphaB < 0) return -1;
+      return alphaA - alphaB;
+    }
+    const numericA = /^-?\d+(\.\d+)?$/.test(normalizedA);
+    const numericB = /^-?\d+(\.\d+)?$/.test(normalizedB);
+    if (numericA || numericB) {
+      if (!numericA) return 1;
+      if (!numericB) return -1;
+      return Number.parseFloat(normalizedA) - Number.parseFloat(normalizedB);
+    }
+    return a.localeCompare(b, 'es', { sensitivity: 'base' });
+  });
 }
 
 function getSizePreferenceGroup(categoryId) {
@@ -530,6 +607,8 @@ function iconPath(name) {
       return <path d="M12 3l1.7 5.2L19 10l-5.3 1.8L12 17l-1.7-5.2L5 10l5.3-1.8L12 3z" />;
     case 'arrow-left':
       return <path d="M14.5 5.5 8 12l6.5 6.5" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" fill="none" />;
+    case 'undo':
+      return <path d="M9 7 5 11l4 4M5 11h9a5 5 0 1 1-3.8 8.2" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />;
     case 'chevron-down':
       return <path d="M6 9.5 12 15l6-5.5" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none" />;
     case 'settings':
@@ -559,6 +638,14 @@ function AppIcon({ name, size = 22, stroke = 'currentColor', fill = 'currentColo
   return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill={fill} stroke={stroke} strokeLinejoin="round">{iconPath(name)}</svg>;
 }
 
+function CategoryImageIcon({ categoryId, label }) {
+  return <img src={CATEGORY_ICON_FILES[categoryId]} alt="" className="category-image-icon" aria-hidden="true" />;
+}
+
+function NavImageIcon({ itemId, label }) {
+  return <img src={NAV_ICON_FILES[itemId]} alt="" className="nav-image-icon" aria-hidden="true" />;
+}
+
 function SafeImage({ sources, alt, className }) {
   const [sourceIndex, setSourceIndex] = useState(0);
   const safeSources = sources.filter(Boolean);
@@ -578,7 +665,7 @@ function SafeImage({ sources, alt, className }) {
   );
 }
 
-function TopBar({ likedCount, activeTab }) {
+function TopBar({ likedCount, activeTab, onOpenNotifications }) {
   const isDiscover = activeTab === 'discover';
   return (
     <header className={`app-topbar ${isDiscover ? 'app-topbar--discover' : ''}`}>
@@ -587,9 +674,68 @@ function TopBar({ likedCount, activeTab }) {
         <div className="brand-copy"><div className="brand-name">SWOPA</div></div>
       </div>
       <div className="topbar-actions">
-        <button type="button" className="chip-icon-button" aria-label="Notificaciones"><AppIcon name="bell" size={18} fill="none" stroke="currentColor" /></button>
+        <button type="button" className="chip-icon-button" aria-label="Notificaciones" onClick={onOpenNotifications}>
+          <img src="./icons/noti.png" alt="" className="notification-icon" aria-hidden="true" />
+        </button>
       </div>
     </header>
+  );
+}
+
+function NotificationsPanel({ open, settings, onToggle, onClose }) {
+  const options = [
+    {
+      id: 'sizeRestock',
+      title: 'Tallas',
+      copy: 'Te avisaremos cuando una prenda vuelva a estar disponible en tu talla.',
+    },
+    {
+      id: 'discounts',
+      title: 'Descuentos',
+      copy: 'Te aviseramos cuando una prenda en tu closet este con descuento.',
+    },
+    {
+      id: 'soldOut',
+      title: 'Agotados',
+      copy: 'Te avisaremos cuando una prenda este a punto de agotarse.',
+    },
+  ];
+
+  return (
+    <div
+      className={`notifications-panel ${open ? 'notifications-panel--open' : ''}`}
+      role="dialog"
+      aria-modal="true"
+      onPointerDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section className="notifications-panel__card" onPointerDown={(event) => event.stopPropagation()}>
+        <div className="notifications-panel__header">
+          <div>
+            <h2 className="notifications-panel__title">Notificaciones</h2>
+            <p className="notifications-panel__copy">Elige qué quieres que Swopa te avise. ;)</p>
+          </div>
+          <button type="button" className="notifications-panel__close" onClick={onClose} aria-label="Cerrar notificaciones">
+            <AppIcon name="close" size={16} fill="none" stroke="currentColor" />
+          </button>
+        </div>
+        <div className="notifications-panel__list">
+          {options.map((option) => (
+            <div className="notifications-panel__row" key={option.id}>
+              <div className="notifications-panel__row-copy">
+                <h3>{option.title}</h3>
+                <p>{option.copy}</p>
+              </div>
+              <label className="switch" aria-label={option.title}>
+                <input type="checkbox" checked={Boolean(settings[option.id])} onChange={() => onToggle(option.id)} />
+                <span className="slider"></span>
+              </label>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -622,6 +768,7 @@ function DetailSheet({ product, open, onClose, onSaveToWardrobe, onAddToCart }) 
 
   if (!product) return null;
   const detailBullets = buildDetailBullets(product);
+  const displaySizes = sortAvailableSizesForDisplay(product.availableSizes);
 
   function handleGrabStart(event) {
     if (!open) return;
@@ -686,12 +833,11 @@ function DetailSheet({ product, open, onClose, onSaveToWardrobe, onAddToCart }) 
               <div className="detail-sheet__title-group"><h3>{product.name}</h3><p>{product.brand} · {product.source}</p></div>
               <div className="detail-sheet__price">{formatPrice(product.price, product.currency)}</div>
             </div>
-            <div className="sheet-card"><div className="sheet-card__label">Tallas disponibles</div><div className="sheet-card__value">{product.availableSizes.join(' · ')}</div></div>
-            <div className="sheet-chip-row">{product.availableSizes.map((size) => <button type="button" key={size} className="sheet-chip">{size}</button>)}</div>
+            <div className="sheet-chip-row">{displaySizes.map((size) => <button type="button" key={size} className="sheet-chip">{size}</button>)}</div>
             <div className="sheet-list">{detailBullets.map((detail) => <div className="sheet-list__item" key={detail}><span className="sheet-list__dot" /><span>{detail}</span></div>)}</div>
             <div className="empty-state__actions" style={{ marginTop: 18 }}>
-              <button type="button" className="primary-button" onClick={() => onSaveToWardrobe(product.id)}><AppIcon name="heart" size={18} />Añadir al wardrobe</button>
-              <button type="button" className="secondary-button" onClick={() => onAddToCart(product.id)}><AppIcon name="plus-cart" size={18} fill="none" stroke="currentColor" />Añadir directo al carrito</button>
+              <button type="button" className="primary-button" onClick={() => onSaveToWardrobe(product.id)}><AppIcon name="heart" size={18} />Añadir al closet</button>
+              <button type="button" className="secondary-button" onClick={() => onAddToCart(product.id)}><img src={NAV_ICON_FILES.cart} alt="" className="button-bag-icon" aria-hidden="true" />Añadir directo a tu bag</button>
             </div>
           </div>
         </div>
@@ -817,7 +963,7 @@ function ImageStoryViewer({ product, open, initialIndex, originRect, onClose }) 
   );
 }
 
-function DiscoverCard({ product, nextProducts, photoIndex, setPhotoIndex, onLike, onDismiss, onExpand }) {
+function DiscoverCard({ product, nextProducts, photoIndex, setPhotoIndex, onLike, onDismiss, onExpand, onUndo, canUndo }) {
   const [drag, setDrag] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const [exiting, setExiting] = useState('');
@@ -972,15 +1118,17 @@ function DiscoverCard({ product, nextProducts, photoIndex, setPhotoIndex, onLike
             </div>
             <div className="deck-card__overlay">
               <div className="product-meta">
-                <div className="product-meta__topline"><h2 className="product-meta__title">{product.name}</h2><div className="product-meta__price">{formatPrice(product.price, product.currency)}</div></div>
+                <div className="product-meta__topline"><h2 className="product-meta__title">{truncateByWords(product.name)}</h2><div className="product-meta__price">{formatPrice(product.price, product.currency)}</div></div>
                 <div className="product-meta__brand"><span>{product.brand}</span><span>·</span><span>{product.source}</span></div>
-                <div className="product-meta__description">{product.shortDescription}</div>
               </div>
               <div className="card-actions-wrap">
                 <div className="card-actions">
                   <button type="button" className="action-button action-button--dismiss" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => triggerSwipe('left', event)} aria-label="Descartar prenda"><AppIcon name="close" size={26} fill="none" stroke="currentColor" /></button>
                   <button type="button" className="action-button action-button--like" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => triggerSwipe('right', event)} aria-label="Guardar prenda"><AppIcon name="heart" size={26} /></button>
                 </div>
+                <button type="button" className="card-undo-button" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onUndo(); }} disabled={!canUndo} aria-label="Deshacer última acción">
+                  <AppIcon name="undo" size={17} fill="none" stroke="currentColor" />
+                </button>
                 <button type="button" className="card-expand-button" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onExpand(); }} aria-label="Ver más información">
                   <AppIcon name="chevron-down" size={18} fill="none" stroke="currentColor" />
                 </button>
@@ -998,7 +1146,7 @@ function DiscoverCard({ product, nextProducts, photoIndex, setPhotoIndex, onLike
     </div>
   );
 }
-function DiscoverScreen({ products, selectedCategories, onResetFilters, onGoToFilters, onResetDismissed, onLike, onDismiss, cartCount, likedCount, onAddToCart }) {
+function DiscoverScreen({ products, selectedCategories, onResetFilters, onGoToFilters, onResetDismissed, onLike, onDismiss, cartCount, likedCount, onAddToCart, onUndo, canUndo }) {
   const [photoIndex, setPhotoIndex] = useState(0);
   const [detailProductId, setDetailProductId] = useState('');
   const activeProduct = products[0];
@@ -1027,10 +1175,10 @@ function DiscoverScreen({ products, selectedCategories, onResetFilters, onGoToFi
             <EmptyState icon="discover" title={allCategoriesSelected ? "Ya no queda más por ver, vuelve en otro momento cuando hayan nuevos productos." : "No queda más ropa por ver"} actions={allCategoriesSelected ? null : <button type="button" className="primary-button" onClick={onGoToFilters}>Cambiar filtros</button>} />
           </div>
         ) : (
-          <DiscoverCard key={activeProduct.id} product={activeProduct} nextProducts={products.slice(1, 3)} photoIndex={photoIndex} setPhotoIndex={setPhotoIndex} onLike={onLike} onDismiss={onDismiss} onExpand={() => setDetailProductId(activeProduct.id)} />
+          <DiscoverCard key={activeProduct.id} product={activeProduct} nextProducts={products.slice(1, 3)} photoIndex={photoIndex} setPhotoIndex={setPhotoIndex} onLike={onLike} onDismiss={onDismiss} onExpand={() => setDetailProductId(activeProduct.id)} onUndo={onUndo} canUndo={canUndo} />
         )}
       </section>
-      <DetailSheet product={detailProduct} open={Boolean(detailProductId)} onClose={() => setDetailProductId('')} onSaveToWardrobe={(productId) => { onLike(productId); setDetailProductId(''); }} onAddToCart={(productId) => { onAddToCart(productId); setDetailProductId(''); }} />
+      <DetailSheet product={detailProduct} open={Boolean(detailProductId)} onClose={() => setDetailProductId('')} onSaveToWardrobe={(productId) => { onLike(productId); setDetailProductId(''); }} onAddToCart={(productId) => { onAddToCart(productId, undefined, { trackUndo: true }); setDetailProductId(''); }} />
     </div>
   );
 }
@@ -1055,7 +1203,7 @@ function FiltersScreen({ selectedCategories, onToggleCategory, onSelectAll, prod
             const selected = selectedCategories.includes(categoryId);
             return (
               <button type="button" key={categoryId} className={`category-tile category-tile--filters ${selected ? 'category-tile--selected' : 'category-tile--off'}`} onClick={() => onToggleCategory(categoryId)} aria-pressed={selected}>
-                <span className="category-tile__icon category-tile__icon--filters"><AppIcon name={meta.icon} size={34} /></span>
+                <span className="category-tile__icon category-tile__icon--filters"><CategoryImageIcon categoryId={categoryId} label={meta.label} /></span>
                 <div className="category-tile__name category-tile__name--filters">{meta.label}</div>
               </button>
             );
@@ -1066,13 +1214,14 @@ function FiltersScreen({ selectedCategories, onToggleCategory, onSelectAll, prod
   );
 }
 
-function SwipeRow({ product, onRemove, onAddToCart, alreadyInCart, onOpenViewer, activePickerId, onPickerFocus, onPickerReset, sizePreferences }) {
+function SwipeRow({ product, onRemove, onAddToCart, alreadyInCart, cartSize, onOpenViewer, activePickerId, onPickerFocus, onPickerReset, sizePreferences }) {
   const [offset, setOffset] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [locked, setLocked] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pendingSize, setPendingSize] = useState('');
   const [successOpen, setSuccessOpen] = useState(false);
+  const [showCartSize, setShowCartSize] = useState(false);
   const pointerId = useRef(null);
   const startX = useRef(0);
   const startY = useRef(0);
@@ -1096,6 +1245,10 @@ function SwipeRow({ product, onRemove, onAddToCart, alreadyInCart, onOpenViewer,
       setOffset(0);
     }
   }, [activePickerId, pickerOpen, product.id]);
+
+  useEffect(() => {
+    if (!cartSize) setShowCartSize(false);
+  }, [cartSize]);
 
   function showSuccessState() {
     setSuccessOpen(true);
@@ -1124,14 +1277,16 @@ function SwipeRow({ product, onRemove, onAddToCart, alreadyInCart, onOpenViewer,
     startX.current = event.clientX;
     startY.current = event.clientY;
     setDragging(true);
-    try { event.currentTarget.setPointerCapture(event.pointerId); } catch (error) {}
   }
 
   function handlePointerMove(event) {
     if (locked || pickerOpen || successOpen || event.pointerId !== pointerId.current) return;
     const dx = event.clientX - startX.current;
     const dy = event.clientY - startY.current;
-    if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 12) return;
+    if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 12) {
+      resetRow();
+      return;
+    }
     setOffset(Math.max(-120, Math.min(120, dx)));
   }
 
@@ -1177,12 +1332,33 @@ function SwipeRow({ product, onRemove, onAddToCart, alreadyInCart, onOpenViewer,
 
   return (
     <div className={`swipe-row ${pickerOpen || successOpen ? 'swipe-row--picker-open' : ''}`}>
-      <div className="swipe-row__actions" aria-hidden="true"><div className="swipe-row__action swipe-row__action--remove">Quitar</div><div className="swipe-row__action swipe-row__action--cart">{alreadyInCart ? 'En carrito' : 'Agregar al carrito'}</div></div>
+      <div className="swipe-row__actions" aria-hidden="true" style={{ opacity: pickerOpen || successOpen ? 0 : Math.min(1, Math.abs(offset) / 28), transition: dragging ? 'none' : 'opacity 160ms ease' }}><div className="swipe-row__action swipe-row__action--remove">Quitar</div><div className="swipe-row__action swipe-row__action--cart">{alreadyInCart ? 'En carrito' : 'Agregar al carrito'}</div></div>
       <div className="swipe-row__card" onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={resetRow} onLostPointerCapture={resetRow} style={{ transform: `translate3d(${offset}px, 0, 0)`, transition: dragging ? 'none' : 'transform 220ms cubic-bezier(0.2, 0.9, 0.2, 1)' }}>
-        <button type="button" className="thumb-launcher" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onOpenViewer(product.id, 0, event.currentTarget.getBoundingClientRect()); }} aria-label={`Ver fotos de ${product.name}`}>
-          <SafeImage sources={[product.images[0], ...product.fallbackImages]} alt={product.name} className="swipe-row__thumb" />
-        </button>
-        <div className="swipe-row__copy"><h3 className="swipe-row__title">{product.name}</h3><div className="swipe-row__subtitle">{product.brand} · {product.source}</div></div>
+        <div className="thumb-stack thumb-stack--wardrobe">
+          <button type="button" className="thumb-launcher" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onOpenViewer(product.id, 0, event.currentTarget.getBoundingClientRect()); }} aria-label={`Ver fotos de ${product.name}`}>
+            <SafeImage sources={[product.images[0], ...product.fallbackImages]} alt={product.name} className="swipe-row__thumb" />
+          </button>
+          {cartSize ? (
+            <button
+              type="button"
+              className={`cart-presence-badge ${showCartSize ? 'cart-presence-badge--size' : ''}`}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                setShowCartSize((current) => !current);
+              }}
+              aria-label={`Esta prenda está en el bag en talla ${cartSize}`}
+            >
+              {showCartSize ? <span>{cartSize}</span> : <img src={NAV_ICON_FILES.cart} alt="" className="cart-presence-badge__icon" aria-hidden="true" />}
+            </button>
+          ) : null}
+        </div>
+        <div className="swipe-row__copy">
+          <button type="button" className="product-title-button swipe-row__title" onClick={(event) => { event.stopPropagation(); onOpenViewer(product.id, 0, event.currentTarget.getBoundingClientRect()); }}>
+            {truncateRowProductName(product.name)}
+          </button>
+          <div className="swipe-row__subtitle">{formatDisplayBrand(product)}</div>
+        </div>
         <div className="swipe-row__price">{formatPrice(product.price, product.currency)}</div>
       </div>
       <div className={`swipe-row__picker ${pickerOpen || successOpen ? 'swipe-row__picker--open' : ''}`}>
@@ -1210,6 +1386,10 @@ function SwipeRow({ product, onRemove, onAddToCart, alreadyInCart, onOpenViewer,
 function WardrobeScreen({ likedProducts, cartItems, selectedCategory, onSelectCategory, onBack, onRemoveLike, onAddToCart, onOpenViewer, sizePreferences }) {
   const counts = getCategoryCounts(likedProducts.map((product) => product.id));
   const cartProductIds = new Set(cartItems.map((entry) => entry.product.id));
+  const cartSizeByProductId = cartItems.reduce((lookup, entry) => {
+    if (!lookup[entry.product.id]) lookup[entry.product.id] = entry.size;
+    return lookup;
+  }, {});
   const [activePickerId, setActivePickerId] = useState('');
 
   useEffect(() => {
@@ -1227,7 +1407,7 @@ function WardrobeScreen({ likedProducts, cartItems, selectedCategory, onSelectCa
           <p className="screen-description">Desliza a la derecha para quitar la prenda o a la izquierda para llevarla a tu carrito.</p>
         </section>
           <section className="category-list">
-            {categoryProducts.length === 0 ? <EmptyState icon={meta.icon} title={`Aún no guardas ${meta.label.toLowerCase()}`} copy="Guarda prendas en Swopa para empezar a llenar esta categoría." /> : categoryProducts.map((product) => <SwipeRow key={product.id} product={product} alreadyInCart={cartProductIds.has(product.id)} onRemove={onRemoveLike} onAddToCart={onAddToCart} onOpenViewer={onOpenViewer} activePickerId={activePickerId} onPickerFocus={setActivePickerId} onPickerReset={() => setActivePickerId('')} sizePreferences={sizePreferences} />)}
+            {categoryProducts.length === 0 ? <EmptyState icon={meta.icon} title={`Aún no guardas ${meta.label.toLowerCase()}`} copy="Guarda prendas en Swopa para empezar a llenar esta categoría." /> : categoryProducts.map((product) => <SwipeRow key={product.id} product={product} alreadyInCart={cartProductIds.has(product.id)} cartSize={cartSizeByProductId[product.id]} onRemove={onRemoveLike} onAddToCart={onAddToCart} onOpenViewer={onOpenViewer} activePickerId={activePickerId} onPickerFocus={setActivePickerId} onPickerReset={() => setActivePickerId('')} sizePreferences={sizePreferences} />)}
           </section>
         </div>
       );
@@ -1250,7 +1430,7 @@ function WardrobeScreen({ likedProducts, cartItems, selectedCategory, onSelectCa
                 className={`wardrobe-bucket wardrobe-bucket--dashboard ${hasItems ? 'wardrobe-bucket--active' : 'wardrobe-bucket--empty'}`}
                 onClick={() => onSelectCategory(categoryId)}
               >
-                <span className="wardrobe-bucket__icon wardrobe-bucket__icon--dashboard"><AppIcon name={meta.icon} size={34} /></span>
+                <span className="wardrobe-bucket__icon wardrobe-bucket__icon--dashboard"><CategoryImageIcon categoryId={categoryId} label={meta.label} /></span>
                 <div className="wardrobe-bucket__name wardrobe-bucket__name--dashboard">{meta.label}</div>
                 {hasItems ? <div className="wardrobe-bucket__caption wardrobe-bucket__caption--dashboard">{counts[categoryId]} {pluralize(counts[categoryId], 'piece', 'pieces')}</div> : null}
                 {hasItems ? <span className="bucket-badge">{counts[categoryId]}</span> : null}
@@ -1279,8 +1459,10 @@ function CartScreen({ cartItems, onRemove, onOpenViewer }) {
                     <SafeImage sources={[entry.product.images[0], ...entry.product.fallbackImages]} alt={entry.product.name} className="cart-row__thumb" />
                   </button>
                   <div className="cart-row__copy">
-                    <h3 className="cart-row__title">{entry.product.name}</h3>
-                    <div className="cart-row__subtitle">{entry.product.brand} · {entry.product.source} · Talla {entry.size}</div>
+                    <button type="button" className="product-title-button cart-row__title" onClick={(event) => onOpenViewer(entry.product.id, 0, event.currentTarget.getBoundingClientRect())}>
+                      {truncateRowProductName(entry.product.name)}
+                    </button>
+                    <div className="cart-row__subtitle">{formatDisplayBrand(entry.product)} · Talla {entry.size}</div>
                   </div>
                   <div className="cart-row__price">{formatPrice(entry.product.price, entry.product.currency)}</div>
                   <button type="button" className="cart-row__remove" onClick={() => onRemove(entry.key)} aria-label={`Quitar ${entry.product.name} talla ${entry.size}`}><AppIcon name="close" size={16} fill="none" stroke="currentColor" /></button>
@@ -1472,7 +1654,7 @@ function ProfileScreen({ sizePreferences, onUpdateSizePreference }) {
           <div className="avatar-badge"><AppIcon name="profile" size={30} fill="none" stroke="currentColor" /></div>
           <h2><span className="profile-card__greeting">Hola,</span><span className="profile-card__name">Martina</span></h2>
         </div>
-        <p>Ajusta tus tallas para una mayor facilidad al agregar al carrito.</p>
+        <p>Ajusta tus tallas para una mayor facilidad al agregar tu bag.</p>
         <div className="profile-size-grid">
           <div className="profile-size-card"><span>Tops</span><strong>{sizePreferences.tops}</strong></div>
           <div className="profile-size-card"><span>Bottoms</span><strong>{sizePreferences.bottoms}</strong></div>
@@ -1504,7 +1686,7 @@ function BottomNav({ activeTab, onChange, likedCount, cartCount }) {
         const active = item.id === activeTab;
         return (
           <button type="button" key={item.id} className={`nav-item ${active ? 'nav-item--active' : ''}`} onClick={() => onChange(item.id)}>
-            <AppIcon name={item.icon} size={21} fill={item.id === 'discover' || item.id === 'cart' || item.id === 'profile' ? 'none' : 'currentColor'} stroke="currentColor" />
+            <NavImageIcon itemId={item.id} label={item.label} />
             <span className="nav-item__label">{item.label}</span>
             {badgeCount > 0 ? <span className="nav-badge">{badgeCount}</span> : null}
           </button>
@@ -1523,6 +1705,13 @@ function SwopaApp() {
   const [wardrobeCategory, setWardrobeCategory] = useState('');
   const [viewerState, setViewerState] = useState({ productId: '', index: 0, rect: null });
   const [sizePreferences, setSizePreferences] = useState(() => loadSizePreferences());
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [undoStack, setUndoStack] = useState([]);
+  const [notificationSettings, setNotificationSettings] = useState({
+    sizeRestock: true,
+    discounts: true,
+    soldOut: false,
+  });
 
   const likedProducts = getProductsFromIds(likedIds);
   const cartItems = getCartItems(cartKeys);
@@ -1539,18 +1728,32 @@ function SwopaApp() {
     } catch (error) {}
   }, [sizePreferences]);
 
-  function handleLike(productId) {
+  function trackUndoAction(action) {
+    setUndoStack((current) => [...current.slice(-9), action]);
+  }
+
+  function handleLike(productId, options = {}) {
+    if (options.trackUndo !== false && !likedIds.includes(productId)) {
+      trackUndoAction({ type: 'like', productId });
+    }
     setLikedIds((current) => createUniqueList(productId, current));
     setDismissedIds((current) => removeFromList(productId, current));
   }
 
-  function handleDismiss(productId) {
+  function handleDismiss(productId, options = {}) {
+    if (options.trackUndo !== false && !dismissedIds.includes(productId)) {
+      trackUndoAction({ type: 'dismiss', productId });
+    }
     setDismissedIds((current) => createUniqueList(productId, current));
   }
 
-  function handleAddToCart(productId, size) {
+  function handleAddToCart(productId, size, options = {}) {
     const product = getProductById(productId);
     const resolvedSize = size || product?.availableSizes?.[0] || 'One size';
+    const cartKey = createCartKey(productId, resolvedSize);
+    if (options.trackUndo && !cartKeys.includes(cartKey)) {
+      trackUndoAction({ type: 'cart', cartKey });
+    }
     setCartKeys((current) => addCartEntry(productId, resolvedSize, current));
   }
 
@@ -1591,9 +1794,31 @@ function SwopaApp() {
     setSizePreferences((current) => ({ ...current, [group]: value }));
   }
 
+  function handleToggleNotification(settingId) {
+    setNotificationSettings((current) => ({ ...current, [settingId]: !current[settingId] }));
+  }
+
+  function handleUndoLastDiscoverAction() {
+    const lastAction = undoStack[undoStack.length - 1];
+    if (!lastAction) return;
+    setUndoStack((current) => current.slice(0, -1));
+    if (lastAction.type === 'like') {
+      setLikedIds((current) => removeFromList(lastAction.productId, current));
+      setDismissedIds((current) => removeFromList(lastAction.productId, current));
+      return;
+    }
+    if (lastAction.type === 'dismiss') {
+      setDismissedIds((current) => removeFromList(lastAction.productId, current));
+      return;
+    }
+    if (lastAction.type === 'cart') {
+      setCartKeys((current) => removeFromList(lastAction.cartKey, current));
+    }
+  }
+
   let screen = null;
   if (activeTab === 'discover') {
-    screen = <DiscoverScreen products={discoverProducts} selectedCategories={selectedCategories} likedCount={likedIds.length} cartCount={cartKeys.length} onLike={handleLike} onDismiss={handleDismiss} onResetFilters={() => setSelectedCategories([...CATEGORY_ORDER])} onGoToFilters={() => setActiveTab('filters')} onResetDismissed={() => setDismissedIds([])} onAddToCart={handleAddToCart} />;
+    screen = <DiscoverScreen products={discoverProducts} selectedCategories={selectedCategories} likedCount={likedIds.length} cartCount={cartKeys.length} onLike={handleLike} onDismiss={handleDismiss} onResetFilters={() => setSelectedCategories([...CATEGORY_ORDER])} onGoToFilters={() => setActiveTab('filters')} onResetDismissed={() => setDismissedIds([])} onAddToCart={handleAddToCart} onUndo={handleUndoLastDiscoverAction} canUndo={undoStack.length > 0} />;
   } else if (activeTab === 'filters') {
     screen = <FiltersScreen selectedCategories={selectedCategories} onToggleCategory={handleToggleCategory} onSelectAll={handleToggleAllCategories} products={CATALOG} />;
   } else if (activeTab === 'wardrobe') {
@@ -1607,10 +1832,11 @@ function SwopaApp() {
   return (
     <div className={`app-shell ${activeTab === 'discover' ? 'app-shell--discover' : ''}`}>
       <div className="app-gradient" />
-      <TopBar likedCount={likedIds.length} activeTab={activeTab} />
-      <main className={`app-content ${activeTab === 'discover' ? 'app-content--discover' : ''} ${activeTab === 'filters' ? 'app-content--filters' : ''} ${activeTab === 'wardrobe' ? 'app-content--wardrobe' : ''}`}>{screen}</main>
+      <TopBar likedCount={likedIds.length} activeTab={activeTab} onOpenNotifications={() => setNotificationsOpen(true)} />
+      <main className={`app-content ${activeTab === 'discover' ? 'app-content--discover' : ''} ${activeTab === 'filters' ? 'app-content--filters' : ''} ${activeTab === 'wardrobe' ? 'app-content--wardrobe' : ''} ${activeTab === 'wardrobe' && wardrobeCategory ? 'app-content--wardrobe-detail' : ''} ${activeTab === 'cart' ? 'app-content--cart' : ''}`}>{screen}</main>
       <BottomNav activeTab={activeTab} onChange={handleTabChange} likedCount={likedIds.length} cartCount={cartKeys.length} />
       <ImageStoryViewer product={viewerState.productId ? getProductById(viewerState.productId) : null} open={Boolean(viewerState.productId)} initialIndex={viewerState.index} originRect={viewerState.rect} onClose={handleCloseViewer} />
+      <NotificationsPanel open={notificationsOpen} settings={notificationSettings} onToggle={handleToggleNotification} onClose={() => setNotificationsOpen(false)} />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'swopa-pwa-v1';
+const CACHE_NAME = 'swopa-pwa-v31';
 const APP_ASSETS = [
   './',
   './index.html',
@@ -10,6 +10,18 @@ const APP_ASSETS = [
   './assets/pwa/icon-512.png',
   './assets/pwa/apple-touch-icon.png',
   './assets/pwa/favicon-32.png',
+  './icons/accesories.png',
+  './icons/bag.png',
+  './icons/bottoms.png',
+  './icons/closet.png',
+  './icons/filter.png',
+  './icons/noti.png',
+  './icons/pj.png',
+  './icons/profile.png',
+  './icons/search.png',
+  './icons/shoes.png',
+  './icons/swimwear.png',
+  './icons/tops.png',
 ];
 
 self.addEventListener('install', (event) => {
